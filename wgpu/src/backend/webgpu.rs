@@ -1006,6 +1006,8 @@ fn future_request_adapter(
         .map_err(|_| request_adapter_null_error(requested_backends))
         .and_then(|adapter| match adapter.into_option() {
             Some(adapter) => Ok(WebAdapter {
+                features: map_wgt_features(adapter.features()),
+                limits: map_wgt_limits(adapter.limits()),
                 inner: adapter,
                 ident: crate::cmp::Identifier::create(),
             }
@@ -1044,6 +1046,7 @@ fn future_request_device(
             (
                 WebDevice {
                     features: map_wgt_features(device.features()),
+                    limits: map_wgt_limits(device.limits()),
                     inner: device,
                     ident: crate::cmp::Identifier::create(),
                     error_scope_count: Rc::new(Cell::new(0)),
@@ -1264,6 +1267,10 @@ pub struct WebAdapter {
     pub(crate) inner: webgpu_sys::GpuAdapter,
     /// Unique identifier for this Adapter.
     ident: crate::cmp::Identifier,
+    /// An adapter's features and limits never change, and reading them crosses into JavaScript
+    /// once per known feature name or limit, so they are read once here.
+    features: crate::Features,
+    limits: crate::Limits,
 }
 
 #[derive(Debug, Clone)]
@@ -1273,9 +1280,11 @@ pub struct WebDevice {
     ident: crate::cmp::Identifier,
     /// Current number of error scopes that have been pushed on the device.
     error_scope_count: Rc<Cell<u32>>,
-    /// The device's features never change, and reading them from `GPUSupportedFeatures` crosses
-    /// into JavaScript once per known feature name, so they are read once here.
+    /// The device's features and limits never change, and reading them from
+    /// `GPUSupportedFeatures` and `GPUSupportedLimits` crosses into JavaScript once per known
+    /// feature name or limit, so they are read once here.
     features: crate::Features,
+    limits: crate::Limits,
 }
 
 #[derive(Debug, Clone)]
@@ -1821,11 +1830,11 @@ impl dispatch::AdapterInterface for WebAdapter {
     }
 
     fn features(&self) -> crate::Features {
-        map_wgt_features(self.inner.features())
+        self.features
     }
 
     fn limits(&self) -> crate::Limits {
-        map_wgt_limits(self.inner.limits())
+        self.limits.clone()
     }
 
     fn downlevel_capabilities(&self) -> crate::DownlevelCapabilities {
@@ -1892,7 +1901,7 @@ impl dispatch::DeviceInterface for WebDevice {
     }
 
     fn limits(&self) -> crate::Limits {
-        map_wgt_limits(self.inner.limits())
+        self.limits.clone()
     }
 
     fn adapter_info(&self) -> crate::AdapterInfo {
